@@ -1,0 +1,30 @@
+# Config Order API untuk Kubernetes.
+# ConfigMap = setting biasa. Secret = nilai rahasia.
+#   kubectl create secret generic order-api-secret \
+#     --from-literal=JWT_SECRET=$(python -c "import secrets; print(secrets.token_hex(32))") \
+#     --from-literal=DATABASE_URL=postgresql+psycopg://app:app@postgres:5432/orders
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: order-api-config
+data:
+  REDIS_URL: redis://redis:6379/2
+  BROKER_URL: redis://redis:6379/0
+  RESULT_BACKEND: redis://redis:6379/1
+  KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+  KAFKA_PAYMENT_TOPIC: payment-notifications
+  CACHE_TTL: "60"
+  RATE_LIMIT: "20"
+  RATE_LIMIT_WINDOW: "60"
+  ACCESS_TOKEN_MINUTES: "30"
+  LOGIN_MAX_ATTEMPTS: "5"
+  LOGIN_BLOCK_SECONDS: "300"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: order-api-secret
+type: Opaque
+stringData:
+  JWT_SECRET: latihan-ganti-dengan-secret-asli-minimal-32-karakter
+  DATABASE_URL: postgresql+psycopg://app:app@postgres:5432/orders

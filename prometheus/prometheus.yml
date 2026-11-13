@@ -1,0 +1,9 @@
+# Prometheus mengambil metrik FastAPI setiap 5 detik melalui network Compose.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: order-api
+    static_configs:
+      - targets: ["api:8000"]

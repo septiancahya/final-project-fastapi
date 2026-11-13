@@ -1,0 +1,54 @@
+# Worker Celery dan consumer Kafka
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: order-worker
+  template:
+    metadata:
+      labels:
+        app: order-worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: worker
+          image: order-api:1.0
+          imagePullPolicy: IfNotPresent
+          command: ["celery", "-A", "app.worker.celery", "worker", "--loglevel=info"]
+          envFrom:
+            - configMapRef:
+                name: order-api-config
+            - secretRef:
+                name: order-api-secret
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-consumer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: order-consumer
+  template:
+    metadata:
+      labels:
+        app: order-consumer
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: consumer
+          image: order-api:1.0
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "app.worker.notification_consumer"]
+          envFrom:
+            - configMapRef:
+                name: order-api-config
+            - secretRef:
+                name: order-api-secret

@@ -1,0 +1,110 @@
+# Order API lengkap: API, worker Celery, consumer Kafka, dan semua dependency-nya.
+#   cp .env.example .env          # isi JWT_SECRET (min 32 char)
+#   docker compose up -d --build
+#   docker compose exec api python seed.py
+#   docker compose exec api python create_user.py --email admin@mail.com --role admin
+
+# Setting bersama untuk api, worker, dan consumer. Host = nama service di network compose.
+x-app: &app
+  image: order-api:local
+  build: .
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://app:app@postgres:5432/orders
+    BROKER_URL: redis://redis:6379/0
+    RESULT_BACKEND: redis://redis:6379/1
+    REDIS_URL: redis://redis:6379/2
+    KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    kafka:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  api:
+    <<: *app
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/metrics')"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+  worker:
+    <<: *app
+    command: ["celery", "-A", "app.worker.celery", "worker", "--loglevel=info"]
+
+  consumer:
+    <<: *app
+    command: ["python", "-m", "app.worker.notification_consumer"]
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: orders
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d orders"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+  kafka:
+    image: apache/kafka:3.9.0
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:29092 --list >/dev/null 2>&1
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
