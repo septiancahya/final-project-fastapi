@@ -1,5 +1,7 @@
 # Order API — Final
 
+Repo: https://github.com/septiancahya/final-project-fastapi
+
 Stack: FastAPI · PostgreSQL (SQLAlchemy 2.0) · Redis (cache + rate limit) · Kafka (notifikasi) ·
 Celery · Prometheus.
 
